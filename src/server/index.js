@@ -1,8 +1,11 @@
 import express from 'express'
 import path from 'path'
 import proxy from 'http-proxy-middleware'
+import { matchRoutes } from 'react-router-config'
 
-import reactApp from './app'
+import renderer from './renderer'
+import serverStore from './serverStore'
+import Routes from '../shared/Routes'
 
 const host = process.env.REACT_APP_HOST || 'localhost'
 const serverPort = process.env.NODE_ENV === 'development'?
@@ -25,7 +28,19 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use('/', express.static('build/client'))
 
-app.use(reactApp)
+app.get('*', (req,res)=>{
+  const store = serverStore()
 
-app.listen(serverPort)
-console.log(`Listening at http://${host}:${serverPort}`)
+  const promises = matchRoutes(Routes,req.path).map(({route})=>{
+    return route.loadData ? route.loadData(store) : null
+  })
+
+  Promise.all(promises).then(()=>{
+    res.send(renderer(req, store))
+  })
+})
+
+
+app.listen(serverPort, ()=>{
+  console.log(`Listening at http://${host}:${serverPort}`)
+})
